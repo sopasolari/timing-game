@@ -21,15 +21,27 @@ player = Entity(
 
 # The update function runs automatically every frame (Game Loop)
 def update():
-    # Move the player forward continuously along the Z-axis
-    # time.dt ensures smooth movement regardless of the computer's frame rate
+   # 1. Move the player forward continuously along the Z-axis
     player.z += 10 * time.dt
     
-    # Camera setup: Follow the player from behind and slightly above
+    # 2. Player Input for Left/Right movement (X-axis)
+    # Using 'd' / 'right arrow' for right, 'a' / 'left arrow' for left
+    if held_keys['d'] or held_keys['right arrow']:
+        player.x += 7 * time.dt
+    
+    if held_keys['a'] or held_keys['left arrow']:
+        player.x -= 7 * time.dt
+        
+    # 3. Boundaries (Keep player from falling off the track)
+    # The track is 10 units wide (from -5 to 5)
+    if player.x > 4.5:
+        player.x = 4.5
+    if player.x < -4.5:
+        player.x = -4.5
+    
+    # 4. Camera setup: Follow the player
     camera.z = player.z - 15
     camera.y = 5
-    
-    # Force the camera to always focus on the player
     camera.look_at(player)
 
 # Start the game loop

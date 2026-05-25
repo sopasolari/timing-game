@@ -20,7 +20,8 @@ current_speed = 10.0 # Base speed
 
 # --- UI ELEMENTS ---
 timer_text = Text(text='Time: 0.0', position=(0, 0.45), origin=(0,0), scale=2, color=color.yellow)
-level_text = Text(text='Level: 1', position=(-0.85, 0.45), origin=(-0.5,0), scale=2, color=color.cyan)
+level_text = Text(text='Level: 1', position=(-0.70, 0.45), origin=(-0.5, 0), scale=2, color=color.cyan)
+
 
 is_jumping = False
 is_crouching = False
@@ -29,12 +30,10 @@ is_crouching = False
 def spawn_obstacle():
     lane_x = random.choice(lanes)
     
-    # Spawn obstacle further ahead as speed increases so player has time to react
     spawn_distance = 60 + (current_speed * 2)
     obs = Entity(model='cube', color=color.red, scale=(1.5, 2, 1.5), position=(lane_x, 0, player.z + spawn_distance), collider='box')
     obstacles.append(obs)
     
-    # Calculate delay based on speed (faster speed = faster spawning)
     spawn_delay = 15.0 / current_speed
     invoke(spawn_obstacle, delay=spawn_delay)
 
@@ -48,11 +47,10 @@ def update():
     play_time += time.dt
     timer_text.text = f'Time: {round(play_time, 1)}'
     
-    # Calculate level (increases every 10 seconds now!)
     new_level = int(play_time / 10) + 1
     if new_level > current_level:
         current_level = new_level
-        current_speed += 2.0 # Increase speed by 2 every level
+        current_speed += 2.0 
         level_text.text = f'Level: {current_level}'
     
     # 2. RUNNING & LANE CHANGING
@@ -78,6 +76,7 @@ def update():
     camera.rotation_x = 18
 
 
+# --- RESET FLAGS ---
 def reset_jump():
     global is_jumping
     is_jumping = False
@@ -90,6 +89,7 @@ def reset_crouch():
 def input(key):
     global current_lane, is_jumping, is_crouching
     
+    # --- LANE CHANGING ---
     if key == 'd' or key == 'right arrow':
         if current_lane < 4: 
             current_lane += 1
@@ -98,21 +98,38 @@ def input(key):
         if current_lane > 0: 
             current_lane -= 1
             
+    # --- JUMPING ---
     if key == 'space':
         if not is_jumping and not is_crouching:
             is_jumping = True
+            
+            # 1. Άλμα προς τα πάνω
             player.animate_y(2, duration=0.3, curve=curve.out_sine)
-            player.animate_y(0, duration=0.3, delay=0.3, curve=curve.in_sine)
+            
+            # 2. Λειτουργία για κάθοδο (τρέχει ΜΕΤΑ από 0.3s)
+            def jump_down():
+                player.animate_y(0, duration=0.3, curve=curve.in_sine)
+            invoke(jump_down, delay=0.3)
+            
+            # 3. Ξεκλείδωμα πλήκτρου
             invoke(reset_jump, delay=0.65)
             
+    # --- CROUCHING ---
     if key == 'down arrow':
         if not is_crouching and not is_jumping:
             is_crouching = True
+            
+            # 1. Σκύψιμο προς τα κάτω
             player.animate_scale((1, 1, 1), duration=0.1)
             player.animate_y(-0.5, duration=0.1)
             
-            player.animate_scale((1, 2, 1), duration=0.1, delay=1)
-            player.animate_y(0, duration=0.1, delay=1)
+            # 2. Λειτουργία για σήκωμα (τρέχει ΜΕΤΑ από 1s)
+            def stand_up():
+                player.animate_scale((1, 2, 1), duration=0.1)
+                player.animate_y(0, duration=0.1)
+            invoke(stand_up, delay=1.0)
+            
+            # 3. Ξεκλείδωμα πλήκτρου
             invoke(reset_crouch, delay=1.15)
 
 app.run()

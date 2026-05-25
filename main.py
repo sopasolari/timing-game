@@ -8,7 +8,11 @@ game_active = False
 has_crashed = False  
 lanes = [-6, -3, 0, 3, 6]
 current_lane = 2
-play_time = 0.0
+
+# --- NEW TIMING SYSTEM ---
+time_left = 30.0              # The countdown timer you see on screen
+total_time_survived = 0.0     # Hidden timer for leveling up & final score
+
 current_level = 1
 current_speed = 10.0
 is_jumping = False
@@ -25,11 +29,14 @@ consecutive_spawns = 0
 # --- ENVIRONMENT ---
 ground = Entity(model='plane', color=color.dark_gray, scale=(15, 1, 2000), position=(0, -1, 0))
 player = Entity(model='cube', color=color.orange, scale=(1, 2, 1), position=(0, 0, 0), collider='box')
+
+# Entity Lists
 obstacles = []
 stars = [] 
+clocks = [] # New list for time bonuses
 
 # --- UI ELEMENTS ---
-timer_text = Text(text='Time: 0.0', position=(0, 0.45), origin=(0,0), scale=2, color=color.yellow, enabled=False)
+timer_text = Text(text='Time Left: 30.0s', position=(0, 0.45), origin=(0,0), scale=2, color=color.green, enabled=False)
 level_text = Text(text='Level: 1', position=(-0.70, 0.45), origin=(-0.5,0), scale=2, color=color.cyan, enabled=False)
 invincible_text = Text(text='INVINCIBLE! 5.0s', position=(0, 0.35), origin=(0,0), scale=3, color=color.gold, enabled=False)
 
@@ -55,19 +62,21 @@ def go_to_main_menu():
     level_text.enabled = False
     invincible_text.enabled = False
     
-    for obs in obstacles:
-        destroy(obs)
-    obstacles.clear()
+    for obs in obstacles: destroy(obs)
+    for s in stars: destroy(s)
+    for c in clocks: destroy(c)
     
-    for s in stars:
-        destroy(s)
+    obstacles.clear()
     stars.clear()
+    clocks.clear()
 
 def start_new_game():
-    global game_active, play_time, current_level, current_speed, current_lane, has_crashed
+    global game_active, time_left, total_time_survived, current_level, current_speed, current_lane, has_crashed
     global last_spawned_lane, consecutive_spawns, is_invincible
     
-    play_time = 0.0
+    # Reset all variables for a fresh run
+    time_left = 30.0
+    total_time_survived = 0.0
     current_level = 1
     current_speed = 10.0
     current_lane = 2
@@ -78,13 +87,13 @@ def start_new_game():
     consecutive_spawns = 0
     player.position = (0, 0, 0)
     
-    for obs in obstacles:
-        destroy(obs)
+    for obs in obstacles: destroy(obs)
+    for s in stars: destroy(s)
+    for c in clocks: destroy(c)
+        
     obstacles.clear()
-    
-    for s in stars:
-        destroy(s)
     stars.clear()
+    clocks.clear()
     
     start_menu.enabled = False
     pause_menu.enabled = False
@@ -150,12 +159,21 @@ def spawn_obstacle():
         
     spawn_distance = 60 + (current_speed * 2)
     
-    # 10% chance to spawn an Invincibility Star
-    if random.random() < 0.10:
+    # Randomize what spawns!
+    spawn_chance = random.random()
+    
+    if spawn_chance < 0.10: 
+        # 10% Chance: Invincibility Star (Yellow Sphere)
         star = Entity(model='sphere', color=color.yellow, scale=(1.2, 1.2, 1.2), position=(lane_x, 1, player.z + spawn_distance), collider='box')
         star.is_star = True
         stars.append(star)
+    elif spawn_chance < 0.30: 
+        # 20% Chance: Time Bonus (Cyan Cube)
+        clock = Entity(model='cube', color=color.cyan, scale=(1, 1, 1), position=(lane_x, 1, player.z + spawn_distance), collider='box')
+        clock.is_time_bonus = True
+        clocks.append(clock)
     else:
+        # 70% Chance: Standard Obstacle (Red Cube)
         obs = Entity(model='cube', color=color.red, scale=(1.5, 2, 1.5), position=(lane_x, 0, player.z + spawn_distance), collider='box')
         obs.is_obstacle = True
         obstacles.append(obs)
@@ -165,7 +183,7 @@ def spawn_obstacle():
 
 
 def update():
-    global play_time, current_level, current_speed, game_active, has_crashed
+    global time_left, total_time_survived, current_level, current_speed, game_active, has_crashed
     global is_invincible, invincibility_timer
     
     if not game_active:
@@ -175,11 +193,32 @@ def update():
         camera.rotation_x = 18
         return
         
-    # 1. UPDATE TIME & PROGRESSION
-    play_time += time.dt
-    timer_text.text = f'Time: {round(play_time, 1)}'
+    # 1. UPDATE TIMERS & PROGRESSION
+    time_left -= time.dt
+    total_time_survived += time.dt
     
-    new_level = int(play_time / 10) + 1
+    # Check for Time Out (Game Over)
+    if time_left <= 0.0:
+        time_left = 0.0
+        has_crashed = True
+        game_active = False
+        game_over_menu.enabled = True
+        timer_text.enabled = False
+        level_text.enabled = False
+        invincible_text.enabled = False
+        print(f"TIME OUT! Reached Level {current_level} and survived for {round(total_time_survived, 1)} seconds.")
+        
+    # Update UI to show Time Left
+    timer_text.text = f'Time Left: {round(time_left, 1)}s'
+    
+    # Turn timer red if time is running low (under 10s)
+    if time_left <= 10.0:
+        timer_text.color = color.red
+    else:
+        timer_text.color = color.green
+    
+    # Progression based on hidden total time
+    new_level = int(total_time_survived / 10) + 1
     if new_level > current_level:
         current_level = new_level
         current_speed += 2.0 
@@ -188,12 +227,9 @@ def update():
     # 2. INVINCIBILITY LOGIC
     if is_invincible:
         invincibility_timer -= time.dt
-        
-        # Dynamic countdown update (ensures it doesn't drop below 0.0 visually)
         display_time = max(0.0, round(invincibility_timer, 1))
         invincible_text.text = f'INVINCIBLE! {display_time}s'
-        
-        player.color = color.gold if int(play_time * 10) % 2 == 0 else color.white
+        player.color = color.gold if int(total_time_survived * 10) % 2 == 0 else color.white
         
         if invincibility_timer <= 0:
             is_invincible = False
@@ -215,8 +251,13 @@ def update():
             invincible_text.text = 'INVINCIBLE! 5.0s'
             invincible_text.enabled = True
             destroy(entity)
-            if entity in stars:
-                stars.remove(entity)
+            if entity in stars: stars.remove(entity)
+                
+        elif getattr(entity, 'is_time_bonus', False):
+            # Collect time bonus! +10 seconds
+            time_left += 10.0
+            destroy(entity)
+            if entity in clocks: clocks.remove(entity)
                 
         elif getattr(entity, 'is_obstacle', False):
             if not is_invincible:
@@ -226,10 +267,10 @@ def update():
                 timer_text.enabled = False
                 level_text.enabled = False
                 invincible_text.enabled = False
+                print(f"CRASH! Reached Level {current_level} and survived for {round(total_time_survived, 1)} seconds.")
             else:
                 destroy(entity)
-                if entity in obstacles:
-                    obstacles.remove(entity)
+                if entity in obstacles: obstacles.remove(entity)
         
     # 5. CLEANUP
     for obs in obstacles:
@@ -241,6 +282,11 @@ def update():
         if s.z < player.z - 5:
             destroy(s)
             stars.remove(s)
+            
+    for c in clocks:
+        if c.z < player.z - 5:
+            destroy(c)
+            clocks.remove(c)
     
     # 6. CAMERA SETUP 
     camera.z = player.z - 22

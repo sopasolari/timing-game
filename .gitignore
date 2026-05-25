@@ -1,0 +1,5 @@
+# Save Files
+save_data.json
+
+# Python Cache
+__pycache__/

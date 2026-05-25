@@ -10,8 +10,8 @@ lanes = [-6, -3, 0, 3, 6]
 current_lane = 2
 
 # --- NEW TIMING SYSTEM ---
-time_left = 30.0              # The countdown timer you see on screen
-total_time_survived = 0.0     # Hidden timer for leveling up & final score
+time_left = 30.0              
+total_time_survived = 0.0     
 
 current_level = 1
 current_speed = 10.0
@@ -28,12 +28,21 @@ consecutive_spawns = 0
 
 # --- ENVIRONMENT ---
 ground = Entity(model='plane', color=color.dark_gray, scale=(15, 1, 2000), position=(0, -1, 0))
+
+# Lane Dividers (White lines)
+for line_x in [-4.5, -1.5, 1.5, 4.5]:
+    Entity(model='cube', color=color.white, scale=(0.1, 0.1, 2000), position=(line_x, -0.95, 0))
+
+# Outer Borders (Cyan lines)
+for border_x in [-7.5, 7.5]:
+    Entity(model='cube', color=color.cyan, scale=(0.2, 0.2, 2000), position=(border_x, -0.95, 0))
+
 player = Entity(model='cube', color=color.orange, scale=(1, 2, 1), position=(0, 0, 0), collider='box')
 
 # Entity Lists
 obstacles = []
 stars = [] 
-clocks = [] # New list for time bonuses
+clocks = [] 
 
 # --- UI ELEMENTS ---
 timer_text = Text(text='Time Left: 30.0s', position=(0, 0.45), origin=(0,0), scale=2, color=color.green, enabled=False)
@@ -159,21 +168,17 @@ def spawn_obstacle():
         
     spawn_distance = 60 + (current_speed * 2)
     
-    # Randomize what spawns!
     spawn_chance = random.random()
     
     if spawn_chance < 0.10: 
-        # 10% Chance: Invincibility Star (Yellow Sphere)
         star = Entity(model='sphere', color=color.yellow, scale=(1.2, 1.2, 1.2), position=(lane_x, 1, player.z + spawn_distance), collider='box')
         star.is_star = True
         stars.append(star)
     elif spawn_chance < 0.30: 
-        # 20% Chance: Time Bonus (Cyan Cube)
         clock = Entity(model='cube', color=color.cyan, scale=(1, 1, 1), position=(lane_x, 1, player.z + spawn_distance), collider='box')
         clock.is_time_bonus = True
         clocks.append(clock)
     else:
-        # 70% Chance: Standard Obstacle (Red Cube)
         obs = Entity(model='cube', color=color.red, scale=(1.5, 2, 1.5), position=(lane_x, 0, player.z + spawn_distance), collider='box')
         obs.is_obstacle = True
         obstacles.append(obs)
@@ -197,7 +202,6 @@ def update():
     time_left -= time.dt
     total_time_survived += time.dt
     
-    # Check for Time Out (Game Over)
     if time_left <= 0.0:
         time_left = 0.0
         has_crashed = True
@@ -206,18 +210,14 @@ def update():
         timer_text.enabled = False
         level_text.enabled = False
         invincible_text.enabled = False
-        print(f"TIME OUT! Reached Level {current_level} and survived for {round(total_time_survived, 1)} seconds.")
         
-    # Update UI to show Time Left
     timer_text.text = f'Time Left: {round(time_left, 1)}s'
     
-    # Turn timer red if time is running low (under 10s)
     if time_left <= 10.0:
         timer_text.color = color.red
     else:
         timer_text.color = color.green
     
-    # Progression based on hidden total time
     new_level = int(total_time_survived / 10) + 1
     if new_level > current_level:
         current_level = new_level
@@ -254,7 +254,6 @@ def update():
             if entity in stars: stars.remove(entity)
                 
         elif getattr(entity, 'is_time_bonus', False):
-            # Collect time bonus! +10 seconds
             time_left += 10.0
             destroy(entity)
             if entity in clocks: clocks.remove(entity)
@@ -267,7 +266,6 @@ def update():
                 timer_text.enabled = False
                 level_text.enabled = False
                 invincible_text.enabled = False
-                print(f"CRASH! Reached Level {current_level} and survived for {round(total_time_survived, 1)} seconds.")
             else:
                 destroy(entity)
                 if entity in obstacles: obstacles.remove(entity)

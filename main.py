@@ -14,6 +14,10 @@ current_speed = 10.0
 is_jumping = False
 is_crouching = False
 
+# Spawner memory for pseudo-randomness
+last_spawned_lane = None
+consecutive_spawns = 0
+
 # --- ENVIRONMENT ---
 ground = Entity(model='plane', color=color.dark_gray, scale=(15, 1, 2000), position=(0, -1, 0))
 player = Entity(model='cube', color=color.orange, scale=(1, 2, 1), position=(0, 0, 0), collider='box')
@@ -50,6 +54,7 @@ def go_to_main_menu():
 
 def start_new_game():
     global game_active, play_time, current_level, current_speed, current_lane, has_crashed
+    global last_spawned_lane, consecutive_spawns
     
     # Reset variables
     play_time = 0.0
@@ -57,6 +62,8 @@ def start_new_game():
     current_speed = 10.0
     current_lane = 2
     has_crashed = False
+    last_spawned_lane = None
+    consecutive_spawns = 0
     player.position = (0, 0, 0)
     
     for obs in obstacles:
@@ -104,10 +111,25 @@ Button(text='Quit', parent=game_over_menu, y=-0.15, scale=(0.4, 0.1), color=colo
 # ==========================================
 
 def spawn_obstacle():
+    global last_spawned_lane, consecutive_spawns
+    
     if not game_active:
         return
         
-    lane_x = random.choice(lanes)
+    # Anti-frustration logic: Prevent more than 2 spawns in the same lane
+    available_lanes = lanes.copy()
+    if consecutive_spawns >= 2 and last_spawned_lane in available_lanes:
+        available_lanes.remove(last_spawned_lane)
+        
+    lane_x = random.choice(available_lanes)
+    
+    # Update spawner memory
+    if lane_x == last_spawned_lane:
+        consecutive_spawns += 1
+    else:
+        last_spawned_lane = lane_x
+        consecutive_spawns = 1
+        
     spawn_distance = 60 + (current_speed * 2)
     obs = Entity(model='cube', color=color.red, scale=(1.5, 2, 1.5), position=(lane_x, 0, player.z + spawn_distance), collider='box')
     obstacles.append(obs)

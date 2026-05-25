@@ -14,6 +14,10 @@ current_speed = 10.0
 is_jumping = False
 is_crouching = False
 
+# --- INVINCIBILITY SYSTEM ---
+is_invincible = False
+invincibility_timer = 0.0
+
 # Spawner memory for pseudo-randomness
 last_spawned_lane = None
 consecutive_spawns = 0
@@ -22,10 +26,12 @@ consecutive_spawns = 0
 ground = Entity(model='plane', color=color.dark_gray, scale=(15, 1, 2000), position=(0, -1, 0))
 player = Entity(model='cube', color=color.orange, scale=(1, 2, 1), position=(0, 0, 0), collider='box')
 obstacles = []
+stars = [] 
 
-# --- UI ELEMENTS (Hidden at start) ---
+# --- UI ELEMENTS ---
 timer_text = Text(text='Time: 0.0', position=(0, 0.45), origin=(0,0), scale=2, color=color.yellow, enabled=False)
 level_text = Text(text='Level: 1', position=(-0.70, 0.45), origin=(-0.5,0), scale=2, color=color.cyan, enabled=False)
+invincible_text = Text(text='INVINCIBLE! 5.0s', position=(0, 0.35), origin=(0,0), scale=3, color=color.gold, enabled=False)
 
 # ==========================================
 # --- MENUS SETUP ---
@@ -36,32 +42,38 @@ game_over_menu = Entity(parent=camera.ui, enabled=False)
 
 # --- MENU FUNCTIONS ---
 def go_to_main_menu():
-    global game_active, has_crashed
+    global game_active, has_crashed, is_invincible
     game_active = False
     has_crashed = False
+    is_invincible = False
+    player.color = color.orange
     
-    # Hide other menus, show start menu
     start_menu.enabled = True
     pause_menu.enabled = False
     game_over_menu.enabled = False
     timer_text.enabled = False
     level_text.enabled = False
+    invincible_text.enabled = False
     
-    # Clean up track
     for obs in obstacles:
         destroy(obs)
     obstacles.clear()
+    
+    for s in stars:
+        destroy(s)
+    stars.clear()
 
 def start_new_game():
     global game_active, play_time, current_level, current_speed, current_lane, has_crashed
-    global last_spawned_lane, consecutive_spawns
+    global last_spawned_lane, consecutive_spawns, is_invincible
     
-    # Reset variables
     play_time = 0.0
     current_level = 1
     current_speed = 10.0
     current_lane = 2
     has_crashed = False
+    is_invincible = False
+    player.color = color.orange
     last_spawned_lane = None
     consecutive_spawns = 0
     player.position = (0, 0, 0)
@@ -70,12 +82,16 @@ def start_new_game():
         destroy(obs)
     obstacles.clear()
     
-    # Toggle Menus
+    for s in stars:
+        destroy(s)
+    stars.clear()
+    
     start_menu.enabled = False
     pause_menu.enabled = False
     game_over_menu.enabled = False
     timer_text.enabled = True
     level_text.enabled = True
+    invincible_text.enabled = False
     
     game_active = True
     spawn_obstacle()
@@ -85,6 +101,10 @@ def resume_game():
     pause_menu.enabled = False
     timer_text.enabled = True
     level_text.enabled = True
+    
+    if is_invincible:
+        invincible_text.enabled = True
+        
     game_active = True
     invoke(spawn_obstacle, delay=0.5)
 
@@ -116,14 +136,12 @@ def spawn_obstacle():
     if not game_active:
         return
         
-    # Anti-frustration logic: Prevent more than 2 spawns in the same lane
     available_lanes = lanes.copy()
     if consecutive_spawns >= 2 and last_spawned_lane in available_lanes:
         available_lanes.remove(last_spawned_lane)
         
     lane_x = random.choice(available_lanes)
     
-    # Update spawner memory
     if lane_x == last_spawned_lane:
         consecutive_spawns += 1
     else:
@@ -131,8 +149,16 @@ def spawn_obstacle():
         consecutive_spawns = 1
         
     spawn_distance = 60 + (current_speed * 2)
-    obs = Entity(model='cube', color=color.red, scale=(1.5, 2, 1.5), position=(lane_x, 0, player.z + spawn_distance), collider='box')
-    obstacles.append(obs)
+    
+    # 10% chance to spawn an Invincibility Star
+    if random.random() < 0.10:
+        star = Entity(model='sphere', color=color.yellow, scale=(1.2, 1.2, 1.2), position=(lane_x, 1, player.z + spawn_distance), collider='box')
+        star.is_star = True
+        stars.append(star)
+    else:
+        obs = Entity(model='cube', color=color.red, scale=(1.5, 2, 1.5), position=(lane_x, 0, player.z + spawn_distance), collider='box')
+        obs.is_obstacle = True
+        obstacles.append(obs)
     
     spawn_delay = 15.0 / current_speed
     invoke(spawn_obstacle, delay=spawn_delay)
@@ -140,6 +166,7 @@ def spawn_obstacle():
 
 def update():
     global play_time, current_level, current_speed, game_active, has_crashed
+    global is_invincible, invincibility_timer
     
     if not game_active:
         camera.z = player.z - 22
@@ -157,27 +184,65 @@ def update():
         current_level = new_level
         current_speed += 2.0 
         level_text.text = f'Level: {current_level}'
+        
+    # 2. INVINCIBILITY LOGIC
+    if is_invincible:
+        invincibility_timer -= time.dt
+        
+        # Dynamic countdown update (ensures it doesn't drop below 0.0 visually)
+        display_time = max(0.0, round(invincibility_timer, 1))
+        invincible_text.text = f'INVINCIBLE! {display_time}s'
+        
+        player.color = color.gold if int(play_time * 10) % 2 == 0 else color.white
+        
+        if invincibility_timer <= 0:
+            is_invincible = False
+            player.color = color.orange
+            invincible_text.enabled = False
     
-    # 2. RUNNING & LANE CHANGING
+    # 3. RUNNING & LANE CHANGING
     player.z += current_speed * time.dt
     player.x = lerp(player.x, lanes[current_lane], time.dt * 10)
     
-    # 3. COLLISION (Triggers Game Over Menu)
+    # 4. COLLISION DETECTION
     hit_info = player.intersects()
     if hit_info.hit:
-        has_crashed = True
-        game_active = False
-        game_over_menu.enabled = True
-        timer_text.enabled = False
-        level_text.enabled = False
+        entity = hit_info.entity
         
-    # 4. CLEANUP
+        if getattr(entity, 'is_star', False):
+            is_invincible = True
+            invincibility_timer = 5.0
+            invincible_text.text = 'INVINCIBLE! 5.0s'
+            invincible_text.enabled = True
+            destroy(entity)
+            if entity in stars:
+                stars.remove(entity)
+                
+        elif getattr(entity, 'is_obstacle', False):
+            if not is_invincible:
+                has_crashed = True
+                game_active = False
+                game_over_menu.enabled = True
+                timer_text.enabled = False
+                level_text.enabled = False
+                invincible_text.enabled = False
+            else:
+                destroy(entity)
+                if entity in obstacles:
+                    obstacles.remove(entity)
+        
+    # 5. CLEANUP
     for obs in obstacles:
         if obs.z < player.z - 5:
             destroy(obs)
             obstacles.remove(obs)
+            
+    for s in stars:
+        if s.z < player.z - 5:
+            destroy(s)
+            stars.remove(s)
     
-    # 5. CAMERA SETUP 
+    # 6. CAMERA SETUP 
     camera.z = player.z - 22
     camera.y = 8
     camera.x = 0
@@ -199,13 +264,12 @@ def input(key):
     
     # --- PAUSE MENU (ESC) ---
     if key == 'escape':
-        # Pause if currently playing
         if game_active and not has_crashed:
             game_active = False
             pause_menu.enabled = True
             timer_text.enabled = False
             level_text.enabled = False
-        # Unpause if pause menu is open
+            invincible_text.enabled = False
         elif pause_menu.enabled:
             resume_game()
             
